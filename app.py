@@ -7,12 +7,17 @@ from datetime import datetime, timedelta
 import random
 from faker import Faker
 
-# 設置頁面配置
+# 設置快取控制
 st.set_page_config(
     page_title="社群媒體貼文分析預測工具",
     page_icon="📊",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# 設置快取和重新導向控制
+st.cache_data.clear()
+st.cache_resource.clear()
 
 # 初始化 Faker
 fake = Faker(['zh_TW'])
