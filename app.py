@@ -6,18 +6,70 @@ import numpy as np
 from datetime import datetime, timedelta
 import random
 from faker import Faker
+import time
 
-# 設置快取控制
+# 設置頁面配置和效能優化
 st.set_page_config(
     page_title="社群媒體貼文分析預測工具",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
 )
 
-# 設置快取和重新導向控制
-st.cache_data.clear()
-st.cache_resource.clear()
+# 停用 Streamlit 的默認主題設定
+st.markdown("""
+    <style>
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display:none;}
+        .stToolbar {display:none;}
+        .stSpinner > div > div {border-top-color: transparent;}
+        .stApp > header {display:none;}
+        .stDecoration {display:none;}
+    </style>
+""", unsafe_allow_html=True)
+
+# 使用 st.cache_data 來快取數據
+@st.cache_data(ttl=3600)
+def get_preset_analyses():
+    return PRESET_ANALYSES
+
+@st.cache_data(ttl=3600)
+def generate_trend_data(base_engagement):
+    """生成未來7天的預測趨勢數據"""
+    dates = pd.date_range(start=datetime.now(), periods=7, freq='D')
+    trend = [base_engagement * (1 + random.uniform(-0.2, 0.3)) for _ in range(7)]
+    return pd.DataFrame({
+        '日期': dates,
+        '預測互動率': trend
+    })
+
+@st.cache_data(ttl=3600)
+def create_comparison_chart(original_metrics, optimized_metrics):
+    """創建原始與優化後的比較圖表"""
+    categories = ['互動率', '觀看數', '按讚數', '留言數', '分享數']
+    
+    fig = go.Figure(data=[
+        go.Bar(name='原始貼文', x=categories, y=original_metrics, marker_color='lightblue'),
+        go.Bar(name='優化後', x=categories, y=optimized_metrics, marker_color='lightgreen')
+    ])
+    
+    fig.update_layout(
+        barmode='group',
+        title='貼文效果比較',
+        xaxis_title='指標',
+        yaxis_title='數值'
+    )
+    
+    return fig
 
 # 初始化 Faker
 fake = Faker(['zh_TW'])
@@ -131,119 +183,97 @@ PRESET_ANALYSES = [
     }
 ]
 
-def generate_trend_data(base_engagement):
-    """生成未來7天的預測趨勢數據"""
-    dates = pd.date_range(start=datetime.now(), periods=7, freq='D')
-    trend = [base_engagement * (1 + random.uniform(-0.2, 0.3)) for _ in range(7)]
-    return pd.DataFrame({
-        '日期': dates,
-        '預測互動率': trend
-    })
-
-def create_comparison_chart(original_metrics, optimized_metrics):
-    """創建原始與優化後的比較圖表"""
-    categories = ['互動率', '觀看數', '按讚數', '留言數', '分享數']
-    
-    fig = go.Figure(data=[
-        go.Bar(name='原始貼文', x=categories, y=original_metrics, marker_color='lightblue'),
-        go.Bar(name='優化後', x=categories, y=optimized_metrics, marker_color='lightgreen')
-    ])
-    
-    fig.update_layout(
-        barmode='group',
-        title='貼文效果比較',
-        xaxis_title='指標',
-        yaxis_title='數值'
-    )
-    
-    return fig
-
 def main():
     st.title("📊 AI 社群媒體貼文分析預測工具")
     
-    # 輸入區域
-    with st.container():
-        st.subheader("✍️ 請輸入要分析的貼文內容")
-        post_content = st.text_area(
-            "貼文內容",
-            height=150,
-            placeholder="在此輸入您想要分析的貼文內容..."
-        )
-        
-        if st.button("開始分析", type="primary"):
-            if post_content:
-                # 隨機選擇一個預設分析結果
-                analysis = random.choice(PRESET_ANALYSES)
-                
-                # 顯示分析結果
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("預測互動率", f"{analysis['engagement_rate']}%")
-                with col2:
-                    st.metric("預測觀看數", f"{analysis['views']:,}")
-                with col3:
-                    st.metric("預測按讚數", f"{analysis['likes']:,}")
-                with col4:
-                    st.metric("預測留言數", f"{analysis['comments']:,}")
-                
-                # 趨勢圖
-                st.subheader("📈 未來7天互動率預測")
-                trend_data = generate_trend_data(analysis['engagement_rate'])
-                fig = px.line(trend_data, x='日期', y='預測互動率')
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # 比較圖
-                st.subheader("📊 優化效果比較")
-                original_metrics = [
-                    analysis['engagement_rate'],
-                    analysis['views'],
-                    analysis['likes'],
-                    analysis['comments'],
-                    analysis['shares']
-                ]
-                optimized_metrics = [x * 1.2 for x in original_metrics]  # 假設優化後提升20%
-                comparison_fig = create_comparison_chart(original_metrics, optimized_metrics)
-                st.plotly_chart(comparison_fig, use_container_width=True)
-                
-                # 詳細分析報告
-                st.subheader("📝 詳細分析報告")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("### 📊 受眾分析")
-                    st.write(f"**年齡分布：** {analysis['audience_age']}")
-                    st.write(f"**性別分布：** {analysis['audience_gender']}")
-                    st.write(f"**最佳發文時間：** {analysis['best_time']}")
-                    st.write(f"**平均閱讀時間：** {analysis['avg_reading_time']}")
+    # 使用 spinner 來提供更好的加載體驗
+    with st.spinner('載入中...'):
+        # 輸入區域
+        with st.container():
+            st.subheader("✍️ 請輸入要分析的貼文內容")
+            post_content = st.text_area(
+                "貼文內容",
+                height=150,
+                placeholder="在此輸入您想要分析的貼文內容..."
+            )
+            
+            if st.button("開始分析", type="primary"):
+                if post_content:
+                    # 添加短暫延遲以避免過快重新導向
+                    time.sleep(0.5)
                     
-                    st.markdown("#### 🎯 受眾特性")
-                    st.write("**喜好文章類型：**")
-                    for content_type in analysis['favorite_content']:
-                        st.write(f"• {content_type}")
+                    # 從快取中獲取分析結果
+                    analysis = random.choice(get_preset_analyses())
+                    
+                    # 顯示分析結果
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("預測互動率", f"{analysis['engagement_rate']}%")
+                    with col2:
+                        st.metric("預測觀看數", f"{analysis['views']:,}")
+                    with col3:
+                        st.metric("預測按讚數", f"{analysis['likes']:,}")
+                    with col4:
+                        st.metric("預測留言數", f"{analysis['comments']:,}")
+                    
+                    # 使用快取的數據生成圖表
+                    st.subheader("📈 未來7天互動率預測")
+                    trend_data = generate_trend_data(analysis['engagement_rate'])
+                    fig = px.line(trend_data, x='日期', y='預測互動率')
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # 比較圖
+                    st.subheader("📊 優化效果比較")
+                    original_metrics = [
+                        analysis['engagement_rate'],
+                        analysis['views'],
+                        analysis['likes'],
+                        analysis['comments'],
+                        analysis['shares']
+                    ]
+                    optimized_metrics = [x * 1.2 for x in original_metrics]
+                    comparison_fig = create_comparison_chart(original_metrics, optimized_metrics)
+                    st.plotly_chart(comparison_fig, use_container_width=True)
+                    
+                    # 詳細分析報告
+                    st.subheader("📝 詳細分析報告")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("### 📊 受眾分析")
+                        st.write(f"**年齡分布：** {analysis['audience_age']}")
+                        st.write(f"**性別分布：** {analysis['audience_gender']}")
+                        st.write(f"**最佳發文時間：** {analysis['best_time']}")
+                        st.write(f"**平均閱讀時間：** {analysis['avg_reading_time']}")
                         
-                    st.write("**最常使用平台：**")
-                    for platform in analysis['preferred_platforms']:
-                        st.write(f"• {platform}")
+                        st.markdown("#### 🎯 受眾特性")
+                        st.write("**喜好文章類型：**")
+                        for content_type in analysis['favorite_content']:
+                            st.write(f"• {content_type}")
+                            
+                        st.write("**最常使用平台：**")
+                        for platform in analysis['preferred_platforms']:
+                            st.write(f"• {platform}")
+                            
+                        st.write("**受眾特性分布：**")
+                        for trait in analysis['audience_traits']:
+                            st.write(f"• {trait}")
+                            
+                        st.markdown("#### 🏷️ 建議標籤")
+                        for tag in analysis['recommended_tags']:
+                            st.write(f"• {tag}")
                         
-                    st.write("**受眾特性分布：**")
-                    for trait in analysis['audience_traits']:
-                        st.write(f"• {trait}")
-                        
-                    st.markdown("#### 🏷️ 建議標籤")
-                    for tag in analysis['recommended_tags']:
-                        st.write(f"• {tag}")
-                
-                with col2:
-                    st.markdown("### 💡 優化建議")
-                    for tip in analysis['optimization_tips']:
-                        st.write(f"• {tip}")
-                
-                # 情感分析
-                st.subheader("🎯 內容情感分析")
-                st.write(f"整體情感傾向：**{analysis['sentiment']}**")
-                
-            else:
-                st.warning("請輸入貼文內容後再進行分析")
+                    with col2:
+                        st.markdown("### 💡 優化建議")
+                        for tip in analysis['optimization_tips']:
+                            st.write(f"• {tip}")
+                    
+                    # 情感分析
+                    st.subheader("🎯 內容情感分析")
+                    st.write(f"整體情感傾向：**{analysis['sentiment']}**")
+                    
+                else:
+                    st.warning("請輸入貼文內容後再進行分析")
 
 if __name__ == "__main__":
     main() 
